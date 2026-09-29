@@ -3,129 +3,283 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Marca de Agua GPS</title>
+<meta name="description" content="Agrega ubicación, coordenadas y fecha como marca de agua a tus fotos.">
+<meta name="theme-color" content="#f4f5f7">
+<meta name="color-scheme" content="light only">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2315803d'/%3E%3Cpath d='M12 19s5-4.4 5-8.5a5 5 0 0 0-10 0C7 14.6 12 19 12 19z' fill='none' stroke='white' stroke-width='2'/%3E%3Ccircle cx='12' cy='10.5' r='1.8' fill='white'/%3E%3C/svg%3E">
+<title>Marca GPS</title>
 <style>
+  :root{
+    --bg:#f4f5f7;--card:#fff;--field:#f8fafc;--text:#0f172a;--muted:#64748b;--line:#e2e8f0;--hover:#f1f5f9;
+    --accent:#15803d;--accent-hover:#166534;--on-accent:#fff;--accent-soft:#dcfce7;--danger:#dc2626;
+    --shadow:0 1px 2px rgba(15,23,42,.04),0 4px 16px rgba(15,23,42,.06);
+    color-scheme:light;
+  }
   *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:#f3f4f6;color:#111}
-  main{max-width:1000px;margin:0 auto;padding:16px}
-  h1{font-size:20px;margin:4px 0 16px}
-  .card{background:#fff;border-radius:10px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px #0001}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  .full{grid-column:1/-1}
-  label{font-size:13px;font-weight:600;display:block;margin-bottom:4px}
-  input,textarea,select{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font:inherit}
-  textarea{resize:vertical;min-height:54px}
-  button{padding:9px 14px;border:0;border-radius:6px;background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer}
-  button.sec{background:#e5e7eb;color:#111}
-  button.del{background:#dc2626}
-  button:disabled{opacity:.5;cursor:default}
-  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
-  .row>div{flex:1;min-width:180px}
-  #drop{border:2px dashed #9ca3af;border-radius:10px;padding:28px;text-align:center;cursor:pointer;background:#fafafa}
-  #drop.over{border-color:#2563eb;background:#eff6ff}
-  #thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px}
-  .th{position:relative;background:#000;border-radius:8px;overflow:hidden}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  main{max-width:720px;margin:0 auto;padding:20px 16px 24px}
+  [hidden]{display:none!important}
+  .i{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+  header{display:flex;align-items:center;gap:12px;margin:4px 0 20px}
+  .logo{width:40px;height:40px;border-radius:12px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center}
+  .logo .i{width:22px;height:22px}
+  h1{font-size:20px;line-height:1.2;margin:0;letter-spacing:-.01em}
+  header p{margin:2px 0 0;color:var(--muted);font-size:14px}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:var(--shadow)}
+  h2{display:flex;align-items:center;gap:10px;font-size:16px;margin:0 0 14px}
+  h2 b{width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:13px}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:10px;
+    border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit;font-weight:600;cursor:pointer;
+    transition:background .15s,border-color .15s,transform .05s;-webkit-tap-highlight-color:transparent}
+  .btn:hover{background:var(--hover)}
+  .btn:active{transform:scale(.98)}
+  .btn:disabled{opacity:.5;cursor:default;transform:none}
+  .btn.primary{background:var(--accent);border-color:transparent;color:var(--on-accent)}
+  .btn.primary:hover{background:var(--accent-hover)}
+  .btn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  .btn.link{min-height:28px;padding:0 8px;border:0;background:none;color:var(--accent);font-size:13px}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .tools{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+  .tools .btn{padding:0 8px}
+
+  .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;margin:-2px 0 14px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{display:flex;align-items:center;flex:none;max-width:240px;border:1px solid var(--line);border-radius:999px;background:var(--field)}
+  .chip.on{border-color:var(--accent);background:var(--accent-soft)}
+  .chip button{border:0;background:none;color:var(--text);font:inherit;font-size:13px;cursor:pointer;min-height:34px}
+  .chip .main{padding:0 4px 0 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chip .del{padding:0 10px 0 4px;color:var(--muted);font-size:17px;line-height:1}
+  .chip .del:hover{color:var(--danger)}
+
+  .field{margin-bottom:12px}
+  .field label,.lbl{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+  input,textarea{width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--field);
+    color:var(--text);font:inherit;font-size:16px;transition:border-color .15s,box-shadow .15s} /* 16px evita el zoom automático de iPhone */
+  input:focus,textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  textarea{resize:vertical;min-height:66px}
+  input[type=number]{-moz-appearance:textfield;appearance:textfield}
+  input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .status{font-weight:500;display:inline-flex;align-items:center;gap:6px}
+  .status.err{color:var(--danger)}
+  .busy::before{content:"";width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .7s linear infinite}
+  .btn.busy::before{width:14px;height:14px}
+  .btn.busy .i{display:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .mapbox{margin-bottom:14px}
+  .search{position:relative;display:flex;gap:8px}
+  .search .i{position:absolute;left:12px;top:13px;color:var(--muted);pointer-events:none}
+  .search input{padding-left:38px}
+  #map{height:300px;border-radius:12px;margin-top:8px;background:var(--hover);border:1px solid var(--line);isolation:isolate}
+  .hint{display:flex;gap:6px;font-size:13px;color:var(--muted);margin-top:6px}
+
+  .stamp{position:relative;border-radius:12px;overflow:hidden;padding:44px 14px 14px;margin-top:4px;
+    background:linear-gradient(160deg,#5b6b5e 0%,#39443d 45%,#1f2622 100%)}
+  .stamp::before{content:"Vista previa";position:absolute;top:10px;left:12px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+  .stamp-body{border-left:3px solid #f5c518;padding-left:10px;color:#fff;font-size:13px;font-weight:500;text-shadow:0 1px 3px rgba(0,0,0,.7);white-space:pre-line}
+  .stamp-body div+div{margin-top:6px}
+  .stamp-body:empty::after{content:"Completa la ubicación para ver la marca";color:rgba(255,255,255,.6);font-weight:400}
+
+  #drop{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:30px 16px;border:2px dashed var(--line);
+    border-radius:14px;background:var(--field);cursor:pointer;transition:border-color .15s,background .15s}
+  #drop:hover,#drop.over{border-color:var(--accent);background:var(--accent-soft)}
+  #drop .ico{width:48px;height:48px;border-radius:14px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;margin-bottom:4px}
+  #drop .ico .i{width:24px;height:24px}
+  #drop strong{font-size:16px}
+  #drop span{color:var(--muted);font-size:14px}
+  #drop.compact{flex-direction:row;justify-content:center;padding:12px;gap:10px}
+  #drop.compact .ico{width:32px;height:32px;border-radius:10px;margin:0}
+  #drop.compact .ico .i{width:18px;height:18px}
+  #drop.compact strong{font-size:15px}
+  #drop.compact span{display:none}
+
+  #thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;align-items:start}
+  #thumbs:not(:empty){margin-top:12px}
+  .th{position:relative;border-radius:12px;overflow:hidden;background:#000;border:1px solid var(--line);animation:pop .2s ease-out}
   .th canvas{width:100%;display:block}
-  .th .x{position:absolute;top:6px;right:6px;padding:2px 8px;background:#000a}
-  .th .dl{position:absolute;top:6px;left:6px;padding:4px 8px;font-size:12px}
-  .muted{color:#666;font-size:13px}
-  #map{height:340px;border-radius:8px;margin-top:8px;background:#e5e7eb}
-  @media(max-width:600px){.grid{grid-template-columns:1fr}}
+  .th .acts{position:absolute;top:8px;right:8px;display:flex;gap:6px}
+  .th button{width:34px;height:34px;border:0;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:#fff;
+    background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  .th button:hover{background:rgba(0,0,0,.75)}
+  .th button .i{width:16px;height:16px}
+  @keyframes pop{from{opacity:0;transform:scale(.96)}}
+
+  .bar{position:sticky;bottom:12px;z-index:500;display:flex;align-items:center;gap:8px;margin-top:4px;padding:10px;
+    background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 10px 30px rgba(15,23,42,.16)}
+  .bar .count{flex:1;padding-left:6px;font-weight:600;font-size:14px}
+  .bar .primary{padding:0 18px}
+
+  #toast{position:fixed;left:50%;bottom:88px;z-index:1000;max-width:calc(100% - 32px);transform:translate(-50%,10px);opacity:0;pointer-events:none;
+    background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;font-weight:500;transition:opacity .2s,transform .2s}
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
+
+  @media (max-width:480px){
+    main{padding-top:14px}
+    .card{padding:14px;border-radius:14px}
+    .tools .btn{flex-direction:column;gap:2px;font-size:13px;min-height:58px}
+    .bar .count{display:none}
+    .bar .primary{flex:1}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
-<main>
-  <h1>📍 Marca de agua: ubicación, coordenadas y fecha</h1>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.1 7-11.5a7 7 0 0 0-14 0C5 14.9 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+  <symbol id="i-gps" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6.5v13.5l6-2.5 6 2.5 6-2.5V4l-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4.5L6 21z"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></symbol>
+  <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+</svg>
 
-  <div class="card">
-    <div class="row" style="margin-bottom:10px">
-      <div>
-        <label for="saved">Ubicaciones guardadas</label>
-        <select id="saved"><option value="">— Seleccionar —</option></select>
-      </div>
-      <button class="del" id="delLoc" type="button">Borrar</button>
+<main>
+  <header>
+    <div class="logo"><svg class="i"><use href="#i-pin"/></svg></div>
+    <div>
+      <h1>Marca GPS</h1>
+      <p>Ubicación, coordenadas y fecha en tus fotos</p>
     </div>
-    <div class="grid">
-      <div class="full">
-        <label for="addr">Dirección (Enter = nueva línea) <span class="muted" id="geoStatus"></span></label>
-        <textarea id="addr" placeholder="Carretera Castillo-El Factor, 33200&#10;El Factor"></textarea>
+  </header>
+
+  <section class="card">
+    <h2><b>1</b>Ubicación</h2>
+
+    <div class="chips" id="saved" hidden></div>
+
+    <div class="tools">
+      <button class="btn" id="gps" type="button"><svg class="i"><use href="#i-gps"/></svg>Mi GPS</button>
+      <button class="btn" id="mapBtn" type="button" aria-pressed="false"><svg class="i"><use href="#i-map"/></svg>Mapa</button>
+      <button class="btn" id="saveLoc" type="button"><svg class="i"><use href="#i-save"/></svg>Guardar</button>
+    </div>
+
+    <div class="mapbox" id="mapBox" hidden>
+      <div class="search">
+        <svg class="i"><use href="#i-search"/></svg>
+        <input id="q" type="search" placeholder="Buscar lugar" enterkeyhint="search" aria-label="Buscar lugar">
+        <button class="btn" id="qBtn" type="button">Buscar</button>
       </div>
+      <div id="map"></div>
+      <div class="hint">Toca el mapa o arrastra el pin <span class="status" id="mapSrc"></span></div>
+    </div>
+
+    <div class="field">
+      <label for="addr">Dirección <span class="status" id="geoStatus"></span></label>
+      <textarea id="addr" rows="2" placeholder="Carretera Castillo-El Factor, 33200&#10;El Factor"></textarea>
+    </div>
+    <div class="two field">
       <div><label for="lat">Latitud</label><input id="lat" type="number" step="any" placeholder="19.254043"></div>
       <div><label for="lon">Longitud</label><input id="lon" type="number" step="any" placeholder="-69.916246"></div>
-      <div><label for="dt">Día y hora</label><input id="dt" type="datetime-local"></div>
-      <div class="row">
-        <button class="sec" id="gps" type="button">Usar mi GPS</button>
-        <button class="sec" id="mapBtn" type="button">Mapa</button>
-        <button id="saveLoc" type="button">Guardar ubicación</button>
-      </div>
-      <div class="full" id="mapBox" hidden>
-        <div class="row">
-          <div><input id="q" type="search" placeholder="Buscar lugar o pegar coordenadas y Enter"></div>
-          <button class="sec" id="qBtn" type="button">Buscar</button>
-        </div>
-        <div id="map"></div>
-        <span class="muted">Toca el mapa o arrastra el pin para fijar la ubicación <span id="mapSrc"></span></span>
-      </div>
     </div>
-  </div>
+    <div class="field">
+      <label for="dt">Fecha y hora <button class="btn link" id="now" type="button">Ahora</button></label>
+      <input id="dt" type="datetime-local">
+    </div>
 
-  <div class="card">
-    <div id="drop">
-      <strong>Arrastra las fotos aquí</strong><br>
-      <span class="muted">o haz clic para abrir el explorador</span>
+    <div class="stamp" aria-hidden="true"><div class="stamp-body" id="stamp"></div></div>
+  </section>
+
+  <section class="card">
+    <h2><b>2</b>Fotos</h2>
+    <div id="drop" role="button" tabindex="0" aria-label="Agregar fotos">
+      <div class="ico"><svg class="i"><use href="#i-img"/></svg></div>
+      <strong id="dropTitle">Arrastra tus fotos aquí</strong>
+      <span>o toca para elegirlas · puedes seleccionar varias</span>
       <input id="file" type="file" accept="image/*" multiple hidden>
     </div>
-    <div class="row" style="margin-top:12px">
-      <button id="dlAll" type="button" disabled>Descargar todas</button>
-      <button class="sec" id="clear" type="button">Limpiar</button>
-      <span class="muted" id="count"></span>
-    </div>
     <div id="thumbs"></div>
+  </section>
+
+  <div class="bar" id="bar" hidden>
+    <span class="count" id="count"></span>
+    <button class="btn" id="clear" type="button">Limpiar</button>
+    <button class="btn primary" id="dlAll" type="button"><svg class="i"><use href="#i-dl"/></svg><span id="dlTxt">Descargar</span></button>
   </div>
+
+  <footer>Las fotos se procesan en tu navegador, no se suben a ningún servidor.</footer>
 </main>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
 const $ = id => document.getElementById(id);
 const KEY = 'mw_locations';
 const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const icon = n => `<svg class="i"><use href="#i-${n}"/></svg>`;
 let photos = []; // {file, prev: ImageBitmap, canvas}
+
+let toastT;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function setStatus(id, text, cls = '') { const s = $(id); s.textContent = text; s.className = 'status ' + cls; }
 
 // ---------- Ubicaciones en caché ----------
 const loadLocs = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
 const storeLocs = l => { try { localStorage.setItem(KEY, JSON.stringify(l)); } catch {} };
 function renderLocs() {
-  const sel = $('saved');
-  sel.length = 1;
-  loadLocs().forEach((l, i) => sel.add(new Option(l.addr.split('\n')[0] + ` (${l.lat}, ${l.lon})`, i)));
+  const box = $('saved'), locs = loadLocs();
+  box.replaceChildren();
+  box.hidden = !locs.length;
+  locs.forEach((l, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    const main = document.createElement('button');
+    main.type = 'button'; main.className = 'main';
+    main.textContent = l.addr.split('\n')[0] || `${l.lat}, ${l.lon}`;
+    main.title = `${l.addr}\n${l.lat}, ${l.lon}`;
+    main.onclick = () => applyLoc(l);
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'del'; del.textContent = '×';
+    del.setAttribute('aria-label', 'Borrar ' + main.textContent);
+    del.onclick = () => { const a = loadLocs(); a.splice(i, 1); storeLocs(a); renderLocs(); };
+    chip.append(main, del);
+    chip.loc = l;
+    box.append(chip);
+  });
+  markChips();
 }
-$('saveLoc').onclick = () => {
-  const loc = { addr: $('addr').value.trim(), lat: $('lat').value, lon: $('lon').value };
-  if (!loc.addr && !loc.lat) return alert('Escribe una dirección o coordenadas');
-  const l = loadLocs().filter(x => !(x.addr === loc.addr && x.lat === loc.lat && x.lon === loc.lon));
-  l.unshift(loc); storeLocs(l); renderLocs(); $('saved').value = 0;
-};
-$('saved').onchange = e => {
-  const l = loadLocs()[e.target.value];
-  if (!l) return;
+// Resalta la ubicación guardada que coincide con los campos
+function markChips() {
+  const addr = $('addr').value.trim(), lat = $('lat').value, lon = $('lon').value;
+  for (const c of $('saved').children) c.classList.toggle('on', c.loc.addr === addr && c.loc.lat === lat && c.loc.lon === lon);
+}
+function applyLoc(l) {
   cancelGeo(); // que una búsqueda pendiente no pise la dirección guardada
   $('addr').value = l.addr; $('lat').value = l.lat; $('lon').value = l.lon;
   refresh();
-};
-$('delLoc').onclick = () => {
-  const i = $('saved').value;
-  if (i === '') return;
-  const l = loadLocs(); l.splice(i, 1); storeLocs(l); renderLocs();
+}
+$('saveLoc').onclick = () => {
+  const loc = { addr: $('addr').value.trim(), lat: $('lat').value, lon: $('lon').value };
+  if (!loc.addr && !loc.lat) return toast('Escribe una dirección o coordenadas primero');
+  const l = loadLocs().filter(x => !(x.addr === loc.addr && x.lat === loc.lat && x.lon === loc.lon));
+  l.unshift(loc); storeLocs(l); renderLocs();
+  toast('Ubicación guardada');
 };
 $('gps').onclick = () => {
-  if (!navigator.geolocation) return alert('GPS no disponible');
+  if (!navigator.geolocation) return toast('GPS no disponible en este navegador');
+  const b = $('gps');
+  b.classList.add('busy'); b.disabled = true;
+  const done = () => { b.classList.remove('busy'); b.disabled = false; };
   navigator.geolocation.getCurrentPosition(
-    p => pick(p.coords.latitude, p.coords.longitude, true, true),
-    e => alert('No se pudo obtener ubicación: ' + e.message), { enableHighAccuracy: true });
+    p => { done(); pick(p.coords.latitude, p.coords.longitude, true, true); },
+    e => { done(); toast('No se pudo obtener la ubicación: ' + e.message); }, { enableHighAccuracy: true, timeout: 20000 });
 };
 
 // ---------- Dirección automática desde coordenadas ----------
 // OpenStreetMap (Nominatim) aporta la calle. BigDataCloud aporta la localidad (más precisa en zonas rurales),
-// pero su API gratuita solo se permite con la ubicación real del dispositivo: se usa solo con "Usar mi GPS".
+// pero su API gratuita solo se permite con la ubicación real del dispositivo: se usa solo con "Mi GPS".
 let geoTimer, geoReq = 0, nextNomi = 0;
 const geoCache = {};
 const uniq = a => a.filter((v, i) => v && a.indexOf(v) === i);
@@ -160,7 +314,7 @@ async function lookup(lat, lon, fromGps, stale) {
   return out;
 }
 // Descarta búsquedas pendientes (al escribir la dirección a mano o elegir una ubicación guardada)
-function cancelGeo() { clearTimeout(geoTimer); geoReq++; $('geoStatus').textContent = ''; }
+function cancelGeo() { clearTimeout(geoTimer); geoReq++; setStatus('geoStatus', ''); }
 function geocode(delay = 900, fromGps = false) {
   cancelGeo();
   const lat = parseFloat($('lat').value), lon = parseFloat($('lon').value);
@@ -168,15 +322,15 @@ function geocode(delay = 900, fromGps = false) {
   const id = geoReq;
   geoTimer = setTimeout(async () => {
     const key = lat.toFixed(5) + ',' + lon.toFixed(5) + (fromGps ? ',gps' : '');
-    $('geoStatus').textContent = '· buscando…';
+    setStatus('geoStatus', 'Buscando…', 'busy');
     try {
       const stale = () => id !== geoReq; // hubo otro cambio después de esta búsqueda
       if (!geoCache[key]) { const r = await lookup(lat, lon, fromGps, stale); if (stale()) return; geoCache[key] = r; }
       if (stale()) return;
       $('addr').value = geoCache[key];
-      $('geoStatus').textContent = '';
+      setStatus('geoStatus', '');
       refresh();
-    } catch { if (id === geoReq) $('geoStatus').textContent = '· no se encontró dirección, escríbela a mano'; }
+    } catch { if (id === geoReq) setStatus('geoStatus', 'No se encontró, escríbela a mano', 'err'); }
   }, delay);
 }
 // Fija una ubicación (desde el GPS, el mapa, la búsqueda o coordenadas pegadas)
@@ -253,11 +407,12 @@ function syncMap(pan = true) {
 $('mapBtn').onclick = async () => {
   const box = $('mapBox');
   box.hidden = !box.hidden;
+  $('mapBtn').setAttribute('aria-pressed', !box.hidden);
   if (box.hidden) return;
   if (map) return map.show(); // recalcula tamaño por si se creó o cambió estando oculto
-  $('mapSrc').textContent = 'cargando mapa…';
-  try { await buildMap(); $('mapSrc').textContent = ''; map.show(); }
-  catch { $('mapSrc').textContent = 'no se pudo cargar el mapa'; }
+  setStatus('mapSrc', 'Cargando mapa…', 'busy');
+  try { await buildMap(); setStatus('mapSrc', ''); map.show(); }
+  catch { setStatus('mapSrc', 'No se pudo cargar el mapa', 'err'); }
 };
 let searchReq = 0;
 async function search() {
@@ -265,19 +420,21 @@ async function search() {
   if (!q) return;
   const m = q.match(COORD_RE);
   if (m && validPos(+m[1], +m[2]) && /^[-\d.,;\s]+$/.test(q)) return pick(m[1], m[2], true);
-  $('mapSrc').textContent = 'buscando…';
+  setStatus('mapSrc', 'Buscando…', 'busy');
   // viewbox = preferir República Dominicana (sin excluir el resto del mundo)
   const j = await nominatim(`search?limit=1&viewbox=-72.1,20.0,-68.3,17.4&bounded=0&q=${encodeURIComponent(q)}`);
   if (id !== searchReq) return; // hubo otra búsqueda después
-  $('mapSrc').textContent = '';
-  if (!Array.isArray(j) || !j[0]) return alert('No se encontró el lugar');
+  setStatus('mapSrc', '');
+  if (!Array.isArray(j) || !j[0]) return toast('No se encontró ese lugar');
   pick(+j[0].lat, +j[0].lon, true);
 }
 $('qBtn').onclick = search;
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
 
-// ---------- Fecha por defecto: ahora ----------
-(() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('dt').value = d.toISOString().slice(0, 16); })();
+// ---------- Fecha: por defecto ahora ----------
+function setNow() { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('dt').value = d.toISOString().slice(0, 16); }
+setNow();
+$('now').onclick = () => { setNow(); refresh(); };
 
 // ---------- Texto de la marca ----------
 function fmtDate(v) {
@@ -342,11 +499,18 @@ function draw(canvas, img, w, h, data) {
     if (i < blocks.length - 1) y += gap;
   });
 }
+// Vista previa de la marca (sin foto)
+function drawStamp(d) {
+  $('stamp').replaceChildren(...[d.date, d.addr, d.coords].filter(Boolean).map(t => {
+    const el = document.createElement('div'); el.textContent = t; return el;
+  }));
+}
 
 // ---------- Fotos ----------
 async function addFiles(files) {
-  for (const file of files) {
-    if (!file.type.startsWith('image/')) continue;
+  const imgs = files.filter(f => f.type.startsWith('image/'));
+  if (files.length && !imgs.length) return toast('Solo se aceptan imágenes');
+  for (const file of imgs) {
     try {
       const full = await createImageBitmap(file);
       const s = Math.min(1, 700 / Math.max(full.width, full.height));
@@ -356,25 +520,40 @@ async function addFiles(files) {
       photos.push(p);
       const div = document.createElement('div');
       div.className = 'th';
-      const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕';
-      x.onclick = () => { photos = photos.filter(q => q !== p); div.remove(); p.prev.close(); updateCount(); };
-      const dl = document.createElement('button'); dl.className = 'dl'; dl.textContent = 'Descargar';
+      const acts = document.createElement('div');
+      acts.className = 'acts';
+      const dl = document.createElement('button');
+      dl.type = 'button'; dl.innerHTML = icon('dl'); dl.title = dl.ariaLabel = 'Descargar';
       dl.onclick = () => tryDownload(p);
-      div.append(p.canvas, x, dl);
+      const x = document.createElement('button');
+      x.type = 'button'; x.innerHTML = icon('x'); x.title = x.ariaLabel = 'Quitar';
+      x.onclick = () => { photos = photos.filter(q => q !== p); div.remove(); p.prev.close(); updateCount(); };
+      acts.append(dl, x);
+      div.append(p.canvas, acts);
       $('thumbs').append(div);
       draw(p.canvas, prev, prev.width, prev.height, getData());
-    } catch (e) { alert('No se pudo abrir ' + file.name); }
+    } catch (e) { toast('No se pudo abrir ' + file.name); }
   }
   updateCount();
 }
 function updateCount() {
-  $('count').textContent = photos.length ? `${photos.length} foto(s)` : '';
-  $('dlAll').disabled = !photos.length;
+  const n = photos.length;
+  $('bar').hidden = !n;
+  $('count').textContent = n === 1 ? '1 foto' : `${n} fotos`;
+  $('dlTxt').textContent = n > 1 ? `Descargar ${n}` : 'Descargar';
+  $('dlAll').disabled = !n;
+  $('drop').classList.toggle('compact', n > 0);
+  $('dropTitle').textContent = n ? 'Agregar más fotos' : 'Arrastra tus fotos aquí';
 }
 let t;
 function refresh() {
   clearTimeout(t);
-  t = setTimeout(() => { syncMap(); const d = getData(); photos.forEach(p => draw(p.canvas, p.prev, p.prev.width, p.prev.height, d)); }, 80);
+  t = setTimeout(() => {
+    syncMap(); markChips();
+    const d = getData();
+    drawStamp(d);
+    photos.forEach(p => draw(p.canvas, p.prev, p.prev.width, p.prev.height, d));
+  }, 80);
 }
 ['addr', 'lat', 'lon', 'dt'].forEach(id => $(id).addEventListener('input', refresh));
 
@@ -397,26 +576,28 @@ async function download(p) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
-const tryDownload = p => download(p).catch(() => alert('No se pudo guardar ' + p.file.name));
+const tryDownload = p => download(p).catch(() => toast('No se pudo guardar ' + p.file.name));
 $('dlAll').onclick = async () => {
-  $('dlAll').disabled = true;
+  const b = $('dlAll');
+  b.disabled = true; b.classList.add('busy');
   for (const p of [...photos]) { await tryDownload(p); await sleep(300); }
-  $('dlAll').disabled = !photos.length;
+  b.classList.remove('busy'); b.disabled = !photos.length;
 };
-$('clear').onclick = () => { photos.forEach(p => p.prev.close()); photos = []; $('thumbs').innerHTML = ''; updateCount(); };
+$('clear').onclick = () => { photos.forEach(p => p.prev.close()); photos = []; $('thumbs').replaceChildren(); updateCount(); };
 
 // ---------- Drag & drop / explorador ----------
 const drop = $('drop');
 drop.onclick = () => $('file').click();
+drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click(); } };
 $('file').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
 ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
-// evitar que el navegador abra la imagen si se suelta fuera de la zona
+// soltar fotos en cualquier parte de la página también funciona (y evita que el navegador abra la imagen)
 window.addEventListener('dragover', e => e.preventDefault());
-window.addEventListener('drop', e => { e.preventDefault(); if (e.target !== drop && !drop.contains(e.target)) addFiles([...e.dataTransfer.files]); });
+window.addEventListener('drop', e => { e.preventDefault(); addFiles([...e.dataTransfer.files]); });
 
 renderLocs();
+drawStamp(getData());
 </script>
 </body>
 </html>
