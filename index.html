@@ -121,6 +121,25 @@
 
   footer{text-align:center;color:var(--muted);font-size:12px;margin-top:18px}
 
+  .modal{position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;padding:16px}
+  .crop-box{background:var(--card);border-radius:16px;padding:12px;display:flex;flex-direction:column;align-items:center;gap:10px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .crop-box .lbl{align-self:stretch;margin:0 4px;font-size:14px;color:var(--text)}
+  .crop-box .lbl span{font-weight:400;color:var(--muted);font-size:13px}
+  .stage{position:relative;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:8px;line-height:0;cursor:crosshair}
+  .stage canvas{display:block}
+  #cropRect{position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.55);cursor:move;
+    background:linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)) 33.33% 0/1px 100% no-repeat,
+      linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)) 66.66% 0/1px 100% no-repeat,
+      linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)) 0 33.33%/100% 1px no-repeat,
+      linear-gradient(rgba(255,255,255,.35),rgba(255,255,255,.35)) 0 66.66%/100% 1px no-repeat}
+  #cropRect i{position:absolute;width:26px;height:26px;border:0 solid #fff}
+  #cropRect [data-h=nw]{left:-5px;top:-5px;border-width:4px 0 0 4px;cursor:nwse-resize}
+  #cropRect [data-h=ne]{right:-5px;top:-5px;border-width:4px 4px 0 0;cursor:nesw-resize}
+  #cropRect [data-h=sw]{left:-5px;bottom:-5px;border-width:0 0 4px 4px;cursor:nesw-resize}
+  #cropRect [data-h=se]{right:-5px;bottom:-5px;border-width:0 4px 4px 0;cursor:nwse-resize}
+  .crop-actions{display:flex;gap:8px;align-self:stretch}
+  .crop-actions .sp{flex:1}
+
   @media (max-width:480px){
     main{padding-top:14px}
     .card{padding:14px;border-radius:14px}
@@ -141,6 +160,7 @@
   <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-crop" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></symbol>
 </svg>
 
 <main>
@@ -209,6 +229,22 @@
   <footer>Las fotos se procesan en tu navegador, no se suben a ningún servidor.</footer>
 </main>
 <div id="toast" role="status" aria-live="polite"></div>
+
+<div class="modal" id="crop" hidden role="dialog" aria-modal="true" aria-label="Recortar foto">
+  <div class="crop-box">
+    <div class="lbl">Recortar foto <span>arrastra para elegir el área</span></div>
+    <div class="stage" id="cropStage">
+      <canvas id="cropImg"></canvas>
+      <div id="cropRect"><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div>
+    </div>
+    <div class="crop-actions">
+      <button class="btn" id="cropReset" type="button">Restablecer</button>
+      <span class="sp"></span>
+      <button class="btn" id="cropCancel" type="button">Cancelar</button>
+      <button class="btn primary" id="cropOk" type="button">Aplicar</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -466,11 +502,12 @@ function wrap(ctx, text, maxW) {
   return out;
 }
 
-// Dibuja imagen + marca de agua en un canvas de w x h
-function draw(canvas, img, w, h, data) {
+// Dibuja imagen (recortada según c, en fracciones 0..1) + marca de agua en un canvas de w x h
+const FULL = { x: 0, y: 0, w: 1, h: 1 };
+function draw(canvas, img, w, h, data, c = FULL) {
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0, w, h);
+  ctx.drawImage(img, c.x * img.width, c.y * img.height, c.w * img.width, c.h * img.height, 0, 0, w, h);
   const fs = Math.min(w, h) * 0.032;
   const lh = fs * 1.3, gap = fs * 0.75;
   ctx.font = `500 ${fs}px Roboto, "Segoe UI", Arial, sans-serif`;
@@ -522,16 +559,19 @@ async function addFiles(files) {
       div.className = 'th';
       const acts = document.createElement('div');
       acts.className = 'acts';
+      const cut = document.createElement('button');
+      cut.type = 'button'; cut.innerHTML = icon('crop'); cut.title = cut.ariaLabel = 'Recortar';
+      cut.onclick = () => openCrop(p);
       const dl = document.createElement('button');
       dl.type = 'button'; dl.innerHTML = icon('dl'); dl.title = dl.ariaLabel = 'Descargar';
       dl.onclick = () => tryDownload(p);
       const x = document.createElement('button');
       x.type = 'button'; x.innerHTML = icon('x'); x.title = x.ariaLabel = 'Quitar';
       x.onclick = () => { photos = photos.filter(q => q !== p); div.remove(); p.prev.close(); updateCount(); };
-      acts.append(dl, x);
+      acts.append(cut, dl, x);
       div.append(p.canvas, acts);
       $('thumbs').append(div);
-      draw(p.canvas, prev, prev.width, prev.height, getData());
+      drawThumb(p, getData());
     } catch (e) { toast('No se pudo abrir ' + file.name); }
   }
   updateCount();
@@ -552,22 +592,26 @@ function refresh() {
     syncMap(); markChips();
     const d = getData();
     drawStamp(d);
-    photos.forEach(p => draw(p.canvas, p.prev, p.prev.width, p.prev.height, d));
+    photos.forEach(p => drawThumb(p, d));
   }, 80);
+}
+function drawThumb(p, d) {
+  const c = p.crop || FULL;
+  draw(p.canvas, p.prev, Math.max(1, Math.round(p.prev.width * c.w)), Math.max(1, Math.round(p.prev.height * c.h)), d, c);
 }
 ['addr', 'lat', 'lon', 'dt'].forEach(id => $(id).addEventListener('input', refresh));
 
-async function render(img, s) {
-  const c = document.createElement('canvas');
+async function render(img, s, c) {
+  const cv = document.createElement('canvas');
   try {
-    draw(c, img, Math.round(img.width * s), Math.round(img.height * s), getData());
-    return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
-  } catch { return null; } finally { c.width = c.height = 0; }
+    draw(cv, img, Math.max(1, Math.round(img.width * c.w * s)), Math.max(1, Math.round(img.height * c.h * s)), getData(), c);
+    return await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.92));
+  } catch { return null; } finally { cv.width = cv.height = 0; }
 }
 async function download(p) {
-  const img = await createImageBitmap(p.file);
+  const img = await createImageBitmap(p.file), c = p.crop || FULL;
   // si la foto supera el límite de canvas del navegador (p. ej. iPhone ~16 MP), se reduce
-  const blob = await render(img, 1) || await render(img, Math.min(1, Math.sqrt(16e6 / (img.width * img.height))));
+  const blob = await render(img, 1, c) || await render(img, Math.min(1, Math.sqrt(16e6 / (img.width * c.w * img.height * c.h))), c);
   img.close();
   if (!blob) throw new Error('imagen demasiado grande');
   const a = document.createElement('a');
@@ -584,6 +628,82 @@ $('dlAll').onclick = async () => {
   b.classList.remove('busy'); b.disabled = !photos.length;
 };
 $('clear').onclick = () => { photos.forEach(p => p.prev.close()); photos = []; $('thumbs').replaceChildren(); updateCount(); };
+
+// ---------- Recortar ----------
+let cropP = null, cr = null, drag = null;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const MIN = 0.05; // tamaño mínimo del recorte (5% de la foto)
+function openCrop(p) {
+  cropP = p; cr = { ...(p.crop || FULL) };
+  const cv = $('cropImg'), img = p.prev;
+  cv.width = img.width; cv.height = img.height;
+  cv.getContext('2d').drawImage(img, 0, 0);
+  const s = Math.min((Math.min(innerWidth, 900) - 56) / img.width, (innerHeight - 170) / img.height);
+  cv.style.width = Math.round(img.width * s) + 'px';
+  cv.style.height = Math.round(img.height * s) + 'px';
+  $('crop').hidden = false;
+  document.body.style.overflow = 'hidden';
+  placeRect();
+  $('cropOk').focus();
+}
+function closeCrop(apply) {
+  if (apply && cropP) {
+    cropP.crop = cr.w > 0.995 && cr.h > 0.995 ? null : { ...cr };
+    drawThumb(cropP, getData());
+  }
+  $('crop').hidden = true;
+  document.body.style.overflow = '';
+  cropP = drag = null;
+}
+function placeRect() {
+  const s = $('cropRect').style;
+  s.left = cr.x * 100 + '%'; s.top = cr.y * 100 + '%';
+  s.width = cr.w * 100 + '%'; s.height = cr.h * 100 + '%';
+}
+const stage = $('cropStage');
+stage.addEventListener('pointerdown', e => {
+  const st = stage.getBoundingClientRect();
+  const px = clamp((e.clientX - st.left) / st.width, 0, 1), py = clamp((e.clientY - st.top) / st.height, 0, 1);
+  // esquina = cambiar tamaño, dentro del recuadro = mover, fuera = dibujar uno nuevo
+  // (si el recuadro ocupa toda la foto, arrastrar dentro también dibuja uno nuevo)
+  const full = cr.w > 0.995 && cr.h > 0.995;
+  const mode = e.target.dataset.h || (e.target.id === 'cropRect' && !full ? 'move' : 'new');
+  drag = { mode, st, px, py, r: { ...cr } };
+  stage.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+stage.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const { mode, st, r } = drag;
+  const px = clamp((e.clientX - st.left) / st.width, 0, 1), py = clamp((e.clientY - st.top) / st.height, 0, 1);
+  if (mode === 'move') {
+    cr.x = clamp(r.x + px - drag.px, 0, 1 - r.w);
+    cr.y = clamp(r.y + py - drag.py, 0, 1 - r.h);
+  } else if (mode === 'new') {
+    cr = { x: Math.min(px, drag.px), y: Math.min(py, drag.py), w: Math.abs(px - drag.px), h: Math.abs(py - drag.py) };
+  } else {
+    let l = r.x, t = r.y, rt = r.x + r.w, b = r.y + r.h;
+    if (mode.includes('w')) l = Math.min(px, rt - MIN); else rt = Math.max(px, l + MIN);
+    if (mode.includes('n')) t = Math.min(py, b - MIN); else b = Math.max(py, t + MIN);
+    cr = { x: l, y: t, w: rt - l, h: b - t };
+  }
+  placeRect();
+});
+const endDrag = () => {
+  if (drag && (cr.w < MIN || cr.h < MIN)) { cr = drag.r; placeRect(); } // un toque suelto no borra el recorte
+  drag = null;
+};
+stage.addEventListener('pointerup', endDrag);
+stage.addEventListener('pointercancel', endDrag);
+$('cropReset').onclick = () => { cr = { ...FULL }; placeRect(); };
+$('cropCancel').onclick = () => closeCrop(false);
+$('cropOk').onclick = () => closeCrop(true);
+$('crop').addEventListener('click', e => { if (e.target.id === 'crop') closeCrop(false); });
+document.addEventListener('keydown', e => {
+  if ($('crop').hidden) return;
+  if (e.key === 'Escape') closeCrop(false);
+  if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') closeCrop(true);
+});
 
 // ---------- Drag & drop / explorador ----------
 const drop = $('drop');
