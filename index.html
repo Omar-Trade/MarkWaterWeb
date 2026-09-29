@@ -46,7 +46,7 @@
     </div>
     <div class="grid">
       <div class="full">
-        <label for="addr">Dirección (Enter = nueva línea)</label>
+        <label for="addr">Dirección (Enter = nueva línea) <span class="muted" id="geoStatus"></span></label>
         <textarea id="addr" placeholder="Carretera Castillo-El Factor, 33200&#10;El Factor"></textarea>
       </div>
       <div><label for="lat">Latitud</label><input id="lat" type="number" step="any" placeholder="19.254043"></div>
@@ -110,9 +110,59 @@ $('gps').onclick = () => {
   navigator.geolocation.getCurrentPosition(p => {
     $('lat').value = p.coords.latitude.toFixed(6);
     $('lon').value = p.coords.longitude.toFixed(6);
-    refresh();
+    refresh(); geocode();
   }, e => alert('No se pudo obtener ubicación: ' + e.message), { enableHighAccuracy: true });
 };
+
+// ---------- Dirección automática desde coordenadas ----------
+// OpenStreetMap aporta la calle; BigDataCloud la localidad (más precisa en zonas rurales)
+let geoTimer, geoReq = 0;
+const geoCache = {};
+const uniq = a => a.filter((v, i) => v && a.indexOf(v) === i);
+async function lookup(lat, lon) {
+  const [osm, bdc] = await Promise.all([
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&accept-language=es&lat=${lat}&lon=${lon}`).then(r => r.json()).catch(() => ({})),
+    fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=es`).then(r => r.json()).catch(() => ({}))
+  ]);
+  const a = osm.address || {};
+  const road = [a.road || a.pedestrian, a.house_number].filter(Boolean).join(' ');
+  const place = bdc.locality || a.suburb || a.village || a.town || a.city || '';
+  const city = bdc.city || a.city || a.town || a.county || '';
+  const prov = bdc.principalSubdivision || a.state || '';
+  const lines = road
+    ? [[road, a.postcode].filter(Boolean).join(', '), uniq([place, city]).join(', ')]
+    : [uniq([place, city]).join(', '), prov];
+  const out = uniq(lines).join('\n');
+  if (!out) throw 0;
+  return out;
+}
+function geocode() {
+  clearTimeout(geoTimer);
+  const lat = parseFloat($('lat').value), lon = parseFloat($('lon').value);
+  if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) return;
+  geoTimer = setTimeout(async () => {
+    const key = lat.toFixed(5) + ',' + lon.toFixed(5), id = ++geoReq;
+    $('geoStatus').textContent = '· buscando…';
+    try {
+      if (!geoCache[key]) geoCache[key] = await lookup(lat, lon);
+      if (id !== geoReq) return; // llegó una respuesta vieja
+      $('addr').value = geoCache[key];
+      $('geoStatus').textContent = '';
+      refresh();
+    } catch { if (id === geoReq) $('geoStatus').textContent = '· no se encontró dirección, escríbela a mano'; }
+  }, 900);
+}
+['lat', 'lon'].forEach(id => {
+  $(id).addEventListener('input', geocode);
+  // pegar "19.254043, -69.916246" (copiado de Google Maps) llena ambos campos
+  $(id).addEventListener('paste', e => {
+    const m = e.clipboardData.getData('text').match(/(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)/);
+    if (!m) return;
+    e.preventDefault();
+    $('lat').value = m[1]; $('lon').value = m[2];
+    refresh(); geocode();
+  });
+});
 
 // ---------- Fecha por defecto: ahora ----------
 (() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('dt').value = d.toISOString().slice(0, 16); })();
