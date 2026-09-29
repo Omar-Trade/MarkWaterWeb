@@ -140,6 +140,20 @@
   .crop-actions{display:flex;gap:8px;align-self:stretch}
   .crop-actions .sp{flex:1}
 
+  .th canvas{cursor:zoom-in}
+  .viewer{flex-direction:column;gap:12px;background:rgba(10,14,20,.94)}
+  #viewImg{display:block;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.5);touch-action:pan-y}
+  .vbtn{position:absolute;width:44px;height:44px;border:0;border-radius:50%;display:grid;place-items:center;cursor:pointer;
+    color:#fff;background:rgba(255,255,255,.14);font-size:26px;line-height:1}
+  .vbtn:hover{background:rgba(255,255,255,.26)}
+  .vbtn.close{top:12px;right:12px}
+  .vbtn.prev{left:12px;top:50%;margin-top:-22px}
+  .vbtn.next{right:12px;top:50%;margin-top:-22px}
+  .vbar{display:flex;align-items:center;gap:8px;max-width:100%}
+  .vbar span{color:rgba(255,255,255,.75);font-size:13px;margin-right:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .vbar .btn:not(.primary){background:rgba(255,255,255,.12);border-color:transparent;color:#fff}
+  @media (max-width:480px){.vbtn.prev,.vbtn.next{top:auto;bottom:14px;margin:0}}
+
   @media (max-width:480px){
     main{padding-top:14px}
     .card{padding:14px;border-radius:14px}
@@ -229,6 +243,18 @@
   <footer>Las fotos se procesan en tu navegador, no se suben a ningún servidor.</footer>
 </main>
 <div id="toast" role="status" aria-live="polite"></div>
+
+<div class="modal viewer" id="view" hidden role="dialog" aria-modal="true" aria-label="Vista previa">
+  <canvas id="viewImg"></canvas>
+  <div class="vbar">
+    <span id="vName"></span>
+    <button class="btn" id="vCrop" type="button"><svg class="i"><use href="#i-crop"/></svg>Recortar</button>
+    <button class="btn primary" id="vDl" type="button"><svg class="i"><use href="#i-dl"/></svg>Descargar</button>
+  </div>
+  <button class="vbtn close" id="vClose" type="button" aria-label="Cerrar"><svg class="i"><use href="#i-x"/></svg></button>
+  <button class="vbtn prev" id="vPrev" type="button" aria-label="Foto anterior">‹</button>
+  <button class="vbtn next" id="vNext" type="button" aria-label="Foto siguiente">›</button>
+</div>
 
 <div class="modal" id="crop" hidden role="dialog" aria-modal="true" aria-label="Recortar foto">
   <div class="crop-box">
@@ -569,6 +595,7 @@ async function addFiles(files) {
       x.type = 'button'; x.innerHTML = icon('x'); x.title = x.ariaLabel = 'Quitar';
       x.onclick = () => { photos = photos.filter(q => q !== p); div.remove(); p.prev.close(); updateCount(); };
       acts.append(cut, dl, x);
+      p.canvas.onclick = () => openView(p);
       div.append(p.canvas, acts);
       $('thumbs').append(div);
       drawThumb(p, getData());
@@ -703,6 +730,64 @@ document.addEventListener('keydown', e => {
   if ($('crop').hidden) return;
   if (e.key === 'Escape') closeCrop(false);
   if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') closeCrop(true);
+});
+
+// ---------- Vista previa grande ----------
+let viewIdx = -1, viewTok = 0, swipeX = null;
+function openView(p) {
+  viewIdx = photos.indexOf(p);
+  if (viewIdx < 0) return;
+  $('view').hidden = false;
+  document.body.style.overflow = 'hidden';
+  showView();
+}
+function closeView() {
+  $('view').hidden = true;
+  document.body.style.overflow = '';
+  viewTok++;
+}
+async function showView() {
+  const p = photos[viewIdx], tok = ++viewTok, c = p.crop || FULL, cv = $('viewImg');
+  $('vName').textContent = photos.length > 1 ? `${viewIdx + 1} / ${photos.length} · ${p.file.name}` : p.file.name;
+  $('vPrev').hidden = $('vNext').hidden = photos.length < 2;
+  // tamaño en pantalla ajustado a la ventana
+  const aspect = (p.prev.width * c.w) / (p.prev.height * c.h);
+  const w = Math.min(innerWidth - 32, (innerHeight - 150) * aspect);
+  cv.style.width = Math.round(w) + 'px';
+  cv.style.height = Math.round(w / aspect) + 'px';
+  // primero la miniatura (instantáneo) y luego la foto original en alta resolución
+  cv.width = p.canvas.width; cv.height = p.canvas.height;
+  cv.getContext('2d').drawImage(p.canvas, 0, 0);
+  try {
+    const img = await createImageBitmap(p.file);
+    if (tok !== viewTok) return img.close(); // se cambió de foto o se cerró
+    const cw = img.width * c.w, ch = img.height * c.h, s = Math.min(1, w * devicePixelRatio / cw);
+    draw(cv, img, Math.round(cw * s), Math.round(ch * s), getData(), c);
+    img.close();
+  } catch {}
+}
+function stepView(d) {
+  if (photos.length < 2) return;
+  viewIdx = (viewIdx + d + photos.length) % photos.length;
+  showView();
+}
+$('vClose').onclick = closeView;
+$('vPrev').onclick = () => stepView(-1);
+$('vNext').onclick = () => stepView(1);
+$('vDl').onclick = () => tryDownload(photos[viewIdx]);
+$('vCrop').onclick = () => { const p = photos[viewIdx]; closeView(); openCrop(p); };
+$('view').addEventListener('click', e => { if (e.target.id === 'view') closeView(); });
+// deslizar a los lados en el celular para pasar de foto
+$('viewImg').addEventListener('pointerdown', e => { swipeX = e.clientX; });
+$('viewImg').addEventListener('pointerup', e => {
+  if (swipeX !== null && Math.abs(e.clientX - swipeX) > 50) stepView(e.clientX < swipeX ? 1 : -1);
+  swipeX = null;
+});
+document.addEventListener('keydown', e => {
+  if ($('view').hidden) return;
+  if (e.key === 'Escape') closeView();
+  if (e.key === 'ArrowLeft') stepView(-1);
+  if (e.key === 'ArrowRight') stepView(1);
 });
 
 // ---------- Drag & drop / explorador ----------
