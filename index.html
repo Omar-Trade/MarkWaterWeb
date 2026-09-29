@@ -82,6 +82,15 @@
   .stamp{position:relative;border-radius:12px;overflow:hidden;padding:44px 14px 14px;margin-top:4px;
     background:linear-gradient(160deg,#5b6b5e 0%,#39443d 45%,#1f2622 100%)}
   .stamp::before{content:"Vista previa";position:absolute;top:10px;left:12px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:rgba(255,255,255,.6)}
+  .stamp-logo{display:inline-block;background:#fff;border-radius:6px;padding:6px 8px;margin-bottom:10px}
+  .stamp-logo img{display:block;height:26px;width:auto}
+  .switch{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px;font-size:14px;font-weight:600;cursor:pointer}
+  .switch input{-webkit-appearance:none;appearance:none;flex:none;position:relative;width:44px;height:26px;min-height:0;padding:0;
+    border:0;border-radius:999px;background:#cbd5e1;cursor:pointer;transition:background .15s}
+  .switch input::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .15s}
+  .switch input:checked{background:var(--accent)}
+  .switch input:checked::after{transform:translateX(18px)}
   .stamp-body{border-left:3px solid #f5c518;padding-left:10px;color:#fff;font-size:13px;font-weight:500;text-shadow:0 1px 3px rgba(0,0,0,.7);white-space:pre-line}
   .stamp-body div+div{margin-top:6px}
   .stamp-body:empty::after{content:"Completa la ubicación para ver la marca";color:rgba(255,255,255,.6);font-weight:400}
@@ -220,7 +229,11 @@
       <input id="dt" type="datetime-local">
     </div>
 
-    <div class="stamp" aria-hidden="true"><div class="stamp-body" id="stamp"></div></div>
+    <label class="switch"><span>Mostrar logo</span><input type="checkbox" id="logoOn" role="switch" checked></label>
+    <div class="stamp" aria-hidden="true">
+      <div class="stamp-logo" id="stampLogo"><img src="logo.png" alt=""></div>
+      <div class="stamp-body" id="stamp"></div>
+    </div>
   </section>
 
   <section class="card">
@@ -513,7 +526,18 @@ function fmtCoords(lat, lon) {
   lat = +lat; lon = +lon;
   return `${Math.abs(lat).toFixed(6)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(6)}°${lon >= 0 ? 'E' : 'W'}`;
 }
-const getData = () => ({ date: fmtDate($('dt').value), addr: $('addr').value.trim(), coords: fmtCoords($('lat').value.trim(), $('lon').value.trim()) });
+// ---------- Logo (encendido por defecto; se recuerda si lo apagas) ----------
+const logo = new Image();
+logo.onload = () => refresh();
+logo.src = 'logo.png';
+try { $('logoOn').checked = localStorage.getItem('mw_logo') !== '0'; } catch {}
+$('logoOn').onchange = () => {
+  try { localStorage.setItem('mw_logo', $('logoOn').checked ? '1' : '0'); } catch {}
+  refresh();
+};
+const logoOn = () => $('logoOn').checked && logo.complete && logo.naturalWidth > 0;
+
+const getData = () => ({ date: fmtDate($('dt').value), addr: $('addr').value.trim(), coords: fmtCoords($('lat').value.trim(), $('lon').value.trim()), logo: logoOn() });
 
 function wrap(ctx, text, maxW) {
   const out = [];
@@ -542,11 +566,22 @@ function draw(canvas, img, w, h, data, c = FULL) {
   if (data.date) blocks.push([data.date]);
   if (data.addr) blocks.push(wrap(ctx, data.addr, maxW));
   if (data.coords) blocks.push([data.coords]);
-  if (!blocks.length) return;
+  if (!blocks.length && !data.logo) return;
   const lines = blocks.reduce((n, b) => n + b.length, 0);
-  const totalH = lines * lh + (blocks.length - 1) * gap;
+  const totalH = blocks.length ? lines * lh + (blocks.length - 1) * gap : 0;
   const x0 = w * 0.03, bottom = h - h * 0.03;
   let y = bottom - totalH;
+  // logo en recuadro blanco, encima del texto
+  if (data.logo) {
+    const pad = fs * 0.45, lw = fs * 7.5, lgh = lw * logo.naturalHeight / logo.naturalWidth;
+    const bw = lw + pad * 2, bh = lgh + pad * 2, by = y - (blocks.length ? gap * 1.2 : 0) - bh;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x0, by, bw, bh, fs * 0.35); else ctx.rect(x0, by, bw, bh);
+    ctx.fill();
+    ctx.drawImage(logo, x0 + pad, by + pad, lw, lgh);
+  }
+  if (!blocks.length) return;
   // barra amarilla
   ctx.fillStyle = '#f5c518';
   ctx.fillRect(x0, y, fs * 0.14, totalH);
@@ -564,6 +599,7 @@ function draw(canvas, img, w, h, data, c = FULL) {
 }
 // Vista previa de la marca (sin foto)
 function drawStamp(d) {
+  $('stampLogo').hidden = !$('logoOn').checked;
   $('stamp').replaceChildren(...[d.date, d.addr, d.coords].filter(Boolean).map(t => {
     const el = document.createElement('div'); el.textContent = t; return el;
   }));
