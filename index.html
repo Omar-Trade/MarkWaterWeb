@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marca de Agua GPS</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;background:#f3f4f6;color:#111}
+  main{max-width:1000px;margin:0 auto;padding:16px}
+  h1{font-size:20px;margin:4px 0 16px}
+  .card{background:#fff;border-radius:10px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px #0001}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .full{grid-column:1/-1}
+  label{font-size:13px;font-weight:600;display:block;margin-bottom:4px}
+  input,textarea,select{width:100%;padding:8px;border:1px solid #ccc;border-radius:6px;font:inherit}
+  textarea{resize:vertical;min-height:54px}
+  button{padding:9px 14px;border:0;border-radius:6px;background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer}
+  button.sec{background:#e5e7eb;color:#111}
+  button.del{background:#dc2626}
+  button:disabled{opacity:.5;cursor:default}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+  .row>div{flex:1;min-width:180px}
+  #drop{border:2px dashed #9ca3af;border-radius:10px;padding:28px;text-align:center;cursor:pointer;background:#fafafa}
+  #drop.over{border-color:#2563eb;background:#eff6ff}
+  #thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px}
+  .th{position:relative;background:#000;border-radius:8px;overflow:hidden}
+  .th canvas{width:100%;display:block}
+  .th .x{position:absolute;top:6px;right:6px;padding:2px 8px;background:#000a}
+  .th .dl{position:absolute;top:6px;left:6px;padding:4px 8px;font-size:12px}
+  .muted{color:#666;font-size:13px}
+  @media(max-width:600px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <h1>📍 Marca de agua: ubicación, coordenadas y fecha</h1>
+
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <div>
+        <label for="saved">Ubicaciones guardadas</label>
+        <select id="saved"><option value="">— Seleccionar —</option></select>
+      </div>
+      <button class="del" id="delLoc" type="button">Borrar</button>
+    </div>
+    <div class="grid">
+      <div class="full">
+        <label for="addr">Dirección (Enter = nueva línea)</label>
+        <textarea id="addr" placeholder="Carretera Castillo-El Factor, 33200&#10;El Factor"></textarea>
+      </div>
+      <div><label for="lat">Latitud</label><input id="lat" type="number" step="any" placeholder="19.254043"></div>
+      <div><label for="lon">Longitud</label><input id="lon" type="number" step="any" placeholder="-69.916246"></div>
+      <div><label for="dt">Día y hora</label><input id="dt" type="datetime-local"></div>
+      <div class="row">
+        <button class="sec" id="gps" type="button">Usar mi GPS</button>
+        <button id="saveLoc" type="button">Guardar ubicación</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="drop">
+      <strong>Arrastra las fotos aquí</strong><br>
+      <span class="muted">o haz clic para abrir el explorador</span>
+      <input id="file" type="file" accept="image/*" multiple hidden>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="dlAll" type="button" disabled>Descargar todas</button>
+      <button class="sec" id="clear" type="button">Limpiar</button>
+      <span class="muted" id="count"></span>
+    </div>
+    <div id="thumbs"></div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const KEY = 'mw_locations';
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+let photos = []; // {file, prev: ImageBitmap, canvas}
+
+// ---------- Ubicaciones en caché ----------
+const loadLocs = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+const storeLocs = l => { try { localStorage.setItem(KEY, JSON.stringify(l)); } catch {} };
+function renderLocs() {
+  const sel = $('saved');
+  sel.length = 1;
+  loadLocs().forEach((l, i) => sel.add(new Option(l.addr.split('\n')[0] + ` (${l.lat}, ${l.lon})`, i)));
+}
+$('saveLoc').onclick = () => {
+  const loc = { addr: $('addr').value.trim(), lat: $('lat').value, lon: $('lon').value };
+  if (!loc.addr && !loc.lat) return alert('Escribe una dirección o coordenadas');
+  const l = loadLocs().filter(x => !(x.addr === loc.addr && x.lat === loc.lat && x.lon === loc.lon));
+  l.unshift(loc); storeLocs(l); renderLocs(); $('saved').value = 0;
+};
+$('saved').onchange = e => {
+  const l = loadLocs()[e.target.value];
+  if (!l) return;
+  $('addr').value = l.addr; $('lat').value = l.lat; $('lon').value = l.lon;
+  refresh();
+};
+$('delLoc').onclick = () => {
+  const i = $('saved').value;
+  if (i === '') return;
+  const l = loadLocs(); l.splice(i, 1); storeLocs(l); renderLocs();
+};
+$('gps').onclick = () => {
+  if (!navigator.geolocation) return alert('GPS no disponible');
+  navigator.geolocation.getCurrentPosition(p => {
+    $('lat').value = p.coords.latitude.toFixed(6);
+    $('lon').value = p.coords.longitude.toFixed(6);
+    refresh();
+  }, e => alert('No se pudo obtener ubicación: ' + e.message), { enableHighAccuracy: true });
+};
+
+// ---------- Fecha por defecto: ahora ----------
+(() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('dt').value = d.toISOString().slice(0, 16); })();
+
+// ---------- Texto de la marca ----------
+function fmtDate(v) {
+  if (!v) return '';
+  const [date, time] = v.split('T');
+  const [y, m, d] = date.split('-').map(Number);
+  let [h, mi] = time.split(':').map(Number);
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${d} de ${MESES[m - 1]} ${y} ${h}:${String(mi).padStart(2, '0')} ${ap}`;
+}
+function fmtCoords(lat, lon) {
+  if (lat === '' || lon === '') return '';
+  lat = +lat; lon = +lon;
+  return `${Math.abs(lat).toFixed(6)}°${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(6)}°${lon >= 0 ? 'E' : 'W'}`;
+}
+const getData = () => ({ date: fmtDate($('dt').value), addr: $('addr').value.trim(), coords: fmtCoords($('lat').value.trim(), $('lon').value.trim()) });
+
+function wrap(ctx, text, maxW) {
+  const out = [];
+  text.split('\n').forEach(par => {
+    let line = '';
+    par.split(' ').forEach(w => {
+      const t = line ? line + ' ' + w : w;
+      if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t;
+    });
+    out.push(line);
+  });
+  return out;
+}
+
+// Dibuja imagen + marca de agua en un canvas de w x h
+function draw(canvas, img, w, h, data) {
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const fs = Math.min(w, h) * 0.032;
+  const lh = fs * 1.3, gap = fs * 0.75;
+  ctx.font = `500 ${fs}px Roboto, "Segoe UI", Arial, sans-serif`;
+  const maxW = w * 0.8;
+  const blocks = [];
+  if (data.date) blocks.push([data.date]);
+  if (data.addr) blocks.push(wrap(ctx, data.addr, maxW));
+  if (data.coords) blocks.push([data.coords]);
+  if (!blocks.length) return;
+  const lines = blocks.reduce((n, b) => n + b.length, 0);
+  const totalH = lines * lh + (blocks.length - 1) * gap;
+  const x0 = w * 0.03, bottom = h - h * 0.03;
+  let y = bottom - totalH;
+  // barra amarilla
+  ctx.fillStyle = '#f5c518';
+  ctx.fillRect(x0, y, fs * 0.14, totalH);
+  // texto
+  ctx.fillStyle = '#fff';
+  ctx.textBaseline = 'top';
+  ctx.shadowColor = 'rgba(0,0,0,.75)';
+  ctx.shadowBlur = fs * 0.2;
+  ctx.shadowOffsetY = fs * 0.04;
+  const tx = x0 + fs * 0.6;
+  blocks.forEach((b, i) => {
+    b.forEach(l => { ctx.fillText(l, tx, y + (lh - fs) / 2); y += lh; });
+    if (i < blocks.length - 1) y += gap;
+  });
+}
+
+// ---------- Fotos ----------
+async function addFiles(files) {
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    try {
+      const full = await createImageBitmap(file);
+      const s = Math.min(1, 700 / Math.max(full.width, full.height));
+      const prev = await createImageBitmap(full, { resizeWidth: Math.round(full.width * s), resizeHeight: Math.round(full.height * s), resizeQuality: 'medium' });
+      full.close();
+      const p = { file, prev, canvas: document.createElement('canvas') };
+      photos.push(p);
+      const div = document.createElement('div');
+      div.className = 'th';
+      const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕';
+      x.onclick = () => { photos = photos.filter(q => q !== p); div.remove(); p.prev.close(); updateCount(); };
+      const dl = document.createElement('button'); dl.className = 'dl'; dl.textContent = 'Descargar';
+      dl.onclick = () => download(p);
+      div.append(p.canvas, x, dl);
+      $('thumbs').append(div);
+      draw(p.canvas, prev, prev.width, prev.height, getData());
+    } catch (e) { alert('No se pudo abrir ' + file.name); }
+  }
+  updateCount();
+}
+function updateCount() {
+  $('count').textContent = photos.length ? `${photos.length} foto(s)` : '';
+  $('dlAll').disabled = !photos.length;
+}
+let t;
+function refresh() {
+  clearTimeout(t);
+  t = setTimeout(() => { const d = getData(); photos.forEach(p => draw(p.canvas, p.prev, p.prev.width, p.prev.height, d)); }, 80);
+}
+['addr', 'lat', 'lon', 'dt'].forEach(id => $(id).addEventListener('input', refresh));
+
+async function download(p) {
+  const img = await createImageBitmap(p.file);
+  const c = document.createElement('canvas');
+  draw(c, img, img.width, img.height, getData());
+  img.close();
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = p.file.name.replace(/\.[^.]+$/, '') + '_marca.jpg';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  c.width = c.height = 0;
+}
+$('dlAll').onclick = async () => {
+  $('dlAll').disabled = true;
+  for (const p of photos) { await download(p); await new Promise(r => setTimeout(r, 300)); }
+  $('dlAll').disabled = false;
+};
+$('clear').onclick = () => { photos.forEach(p => p.prev.close()); photos = []; $('thumbs').innerHTML = ''; updateCount(); };
+
+// ---------- Drag & drop / explorador ----------
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+$('file').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files]));
+// evitar que el navegador abra la imagen si se suelta fuera de la zona
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => { e.preventDefault(); if (e.target !== drop && !drop.contains(e.target)) addFiles([...e.dataTransfer.files]); });
+
+renderLocs();
+</script>
+</body>
+</html>
