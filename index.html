@@ -146,6 +146,16 @@
   #cropRect [data-h=ne]{right:-5px;top:-5px;border-width:4px 4px 0 0;cursor:nesw-resize}
   #cropRect [data-h=sw]{left:-5px;bottom:-5px;border-width:0 0 4px 4px;cursor:nesw-resize}
   #cropRect [data-h=se]{right:-5px;bottom:-5px;border-width:0 4px 4px 0;cursor:nwse-resize}
+  .btn.wide{width:100%;margin-bottom:10px;color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+  .btn.wide:hover{background:var(--accent-soft);filter:brightness(.97)}
+  #camVideo{display:block;max-width:calc(100vw - 32px);max-height:calc(100vh - 150px);border-radius:8px;background:#000}
+  #camVideo.flash{animation:flash .25s}
+  @keyframes flash{from{opacity:.2}}
+  .cambar{display:flex;align-items:center;justify-content:center;gap:28px;min-width:260px}
+  .cambar .btn{background:rgba(255,255,255,.12);border-color:transparent;color:#fff;min-width:96px}
+  .shutter{width:68px;height:68px;border-radius:50%;border:4px solid #fff;background:rgba(255,255,255,.25);cursor:pointer;flex:none}
+  .shutter:hover{background:rgba(255,255,255,.45)}
+  .shutter:active{background:#fff}
   .crop-actions{display:flex;gap:8px;align-self:stretch}
   .crop-actions .sp{flex:1}
 
@@ -183,6 +193,7 @@
   <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></symbol>
   <symbol id="i-crop" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></symbol>
 </svg>
 
@@ -238,6 +249,8 @@
 
   <section class="card">
     <h2><b>2</b>Fotos</h2>
+    <button class="btn wide" id="camBtn" type="button"><svg class="i"><use href="#i-cam"/></svg>Tomar foto</button>
+    <input id="camFile" type="file" accept="image/*" capture="environment" hidden>
     <div id="drop" role="button" tabindex="0" aria-label="Agregar fotos">
       <div class="ico"><svg class="i"><use href="#i-img"/></svg></div>
       <strong id="dropTitle">Arrastra tus fotos aquí</strong>
@@ -267,6 +280,16 @@
   <button class="vbtn close" id="vClose" type="button" aria-label="Cerrar"><svg class="i"><use href="#i-x"/></svg></button>
   <button class="vbtn prev" id="vPrev" type="button" aria-label="Foto anterior">‹</button>
   <button class="vbtn next" id="vNext" type="button" aria-label="Foto siguiente">›</button>
+</div>
+
+<div class="modal viewer" id="cam" hidden role="dialog" aria-modal="true" aria-label="Cámara">
+  <video id="camVideo" playsinline muted autoplay></video>
+  <div class="cambar">
+    <button class="btn" id="camDone" type="button">Cerrar</button>
+    <button class="shutter" id="camShot" type="button" aria-label="Tomar foto"></button>
+    <span style="min-width:96px"></span>
+  </div>
+  <button class="vbtn close" id="camClose" type="button" aria-label="Cerrar cámara"><svg class="i"><use href="#i-x"/></svg></button>
 </div>
 
 <div class="modal" id="crop" hidden role="dialog" aria-modal="true" aria-label="Recortar foto">
@@ -824,6 +847,59 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeView();
   if (e.key === 'ArrowLeft') stepView(-1);
   if (e.key === 'ArrowRight') stepView(1);
+});
+
+// ---------- Cámara ----------
+// En el celular se abre la cámara nativa del teléfono (mejor calidad); en la PC, la cámara web dentro de la página.
+let camStream = null, camShots = 0;
+$('camBtn').onclick = () => {
+  if (matchMedia('(pointer: coarse)').matches || !navigator.mediaDevices?.getUserMedia) return $('camFile').click();
+  openCam();
+};
+$('camFile').onchange = e => { addFiles([...e.target.files]); e.target.value = ''; };
+async function openCam() {
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false
+    });
+  } catch (e) {
+    return toast(e.name === 'NotAllowedError' ? 'Permite el acceso a la cámara para tomar fotos' : 'No se encontró una cámara');
+  }
+  camShots = 0; updCam();
+  $('camVideo').srcObject = camStream;
+  $('cam').hidden = false;
+  document.body.style.overflow = 'hidden';
+  $('camShot').focus();
+}
+function closeCam() {
+  if (camStream) camStream.getTracks().forEach(t => t.stop());
+  camStream = null;
+  $('camVideo').srcObject = null;
+  $('cam').hidden = true;
+  document.body.style.overflow = '';
+}
+function updCam() { $('camDone').textContent = camShots ? `Listo (${camShots})` : 'Cerrar'; }
+async function shoot() {
+  const v = $('camVideo');
+  if (!v.videoWidth) return;
+  const c = document.createElement('canvas');
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext('2d').drawImage(v, 0, 0);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.95));
+  c.width = c.height = 0;
+  if (!blob) return toast('No se pudo tomar la foto');
+  v.classList.remove('flash'); void v.offsetWidth; v.classList.add('flash');
+  const d = new Date(), p2 = n => String(n).padStart(2, '0');
+  const name = `foto_${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}-${camShots + 1}.jpg`;
+  camShots++; updCam();
+  await addFiles([new File([blob], name, { type: 'image/jpeg', lastModified: d.getTime() })]);
+}
+$('camShot').onclick = shoot;
+$('camDone').onclick = closeCam;
+$('camClose').onclick = closeCam;
+document.addEventListener('keydown', e => {
+  if ($('cam').hidden) return;
+  if (e.key === 'Escape') closeCam();
 });
 
 // ---------- Drag & drop / explorador ----------
