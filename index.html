@@ -29,6 +29,7 @@
   .th .x{position:absolute;top:6px;right:6px;padding:2px 8px;background:#000a}
   .th .dl{position:absolute;top:6px;left:6px;padding:4px 8px;font-size:12px}
   .muted{color:#666;font-size:13px}
+  #map{height:340px;border-radius:8px;margin-top:8px;background:#e5e7eb}
   @media(max-width:600px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
@@ -54,7 +55,16 @@
       <div><label for="dt">Día y hora</label><input id="dt" type="datetime-local"></div>
       <div class="row">
         <button class="sec" id="gps" type="button">Usar mi GPS</button>
+        <button class="sec" id="mapBtn" type="button">Mapa</button>
         <button id="saveLoc" type="button">Guardar ubicación</button>
+      </div>
+      <div class="full" id="mapBox" hidden>
+        <div class="row">
+          <div><input id="q" type="search" placeholder="Buscar lugar o pegar coordenadas y Enter"></div>
+          <button class="sec" id="qBtn" type="button">Buscar</button>
+        </div>
+        <div id="map"></div>
+        <span class="muted">Toca el mapa o arrastra el pin para fijar la ubicación <span id="mapSrc"></span></span>
       </div>
     </div>
   </div>
@@ -97,6 +107,7 @@ $('saveLoc').onclick = () => {
 $('saved').onchange = e => {
   const l = loadLocs()[e.target.value];
   if (!l) return;
+  cancelGeo(); // que una búsqueda pendiente no pise la dirección guardada
   $('addr').value = l.addr; $('lat').value = l.lat; $('lon').value = l.lon;
   refresh();
 };
@@ -107,22 +118,34 @@ $('delLoc').onclick = () => {
 };
 $('gps').onclick = () => {
   if (!navigator.geolocation) return alert('GPS no disponible');
-  navigator.geolocation.getCurrentPosition(p => {
-    $('lat').value = p.coords.latitude.toFixed(6);
-    $('lon').value = p.coords.longitude.toFixed(6);
-    refresh(); geocode();
-  }, e => alert('No se pudo obtener ubicación: ' + e.message), { enableHighAccuracy: true });
+  navigator.geolocation.getCurrentPosition(
+    p => pick(p.coords.latitude, p.coords.longitude, true, true),
+    e => alert('No se pudo obtener ubicación: ' + e.message), { enableHighAccuracy: true });
 };
 
 // ---------- Dirección automática desde coordenadas ----------
-// OpenStreetMap aporta la calle; BigDataCloud la localidad (más precisa en zonas rurales)
-let geoTimer, geoReq = 0;
+// OpenStreetMap (Nominatim) aporta la calle. BigDataCloud aporta la localidad (más precisa en zonas rurales),
+// pero su API gratuita solo se permite con la ubicación real del dispositivo: se usa solo con "Usar mi GPS".
+let geoTimer, geoReq = 0, nextNomi = 0;
 const geoCache = {};
 const uniq = a => a.filter((v, i) => v && a.indexOf(v) === i);
-async function lookup(lat, lon) {
+const validPos = (lat, lon) => Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+const COORD_RE = /(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)/;
+const getJSON = url => fetch(url).then(r => r.ok ? r.json() : {}).catch(() => ({}));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Nominatim permite máximo 1 petición por segundo
+async function nominatim(path, stale) {
+  while (Date.now() < nextNomi) {
+    await sleep(nextNomi - Date.now());
+    if (stale && stale()) return {}; // ya no hace falta: hubo otro clic o cambio
+  }
+  nextNomi = Date.now() + 1100;
+  return getJSON('https://nominatim.openstreetmap.org/' + path + '&format=jsonv2&accept-language=es');
+}
+async function lookup(lat, lon, fromGps, stale) {
   const [osm, bdc] = await Promise.all([
-    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&accept-language=es&lat=${lat}&lon=${lon}`).then(r => r.json()).catch(() => ({})),
-    fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=es`).then(r => r.json()).catch(() => ({}))
+    nominatim(`reverse?zoom=17&lat=${lat}&lon=${lon}`, stale),
+    fromGps ? getJSON(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=es`) : {}
   ]);
   const a = osm.address || {};
   const road = [a.road || a.pedestrian, a.house_number].filter(Boolean).join(' ');
@@ -136,33 +159,122 @@ async function lookup(lat, lon) {
   if (!out) throw 0;
   return out;
 }
-function geocode() {
-  clearTimeout(geoTimer);
+// Descarta búsquedas pendientes (al escribir la dirección a mano o elegir una ubicación guardada)
+function cancelGeo() { clearTimeout(geoTimer); geoReq++; $('geoStatus').textContent = ''; }
+function geocode(delay = 900, fromGps = false) {
+  cancelGeo();
   const lat = parseFloat($('lat').value), lon = parseFloat($('lon').value);
-  if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) return;
+  if (!validPos(lat, lon)) return;
+  const id = geoReq;
   geoTimer = setTimeout(async () => {
-    const key = lat.toFixed(5) + ',' + lon.toFixed(5), id = ++geoReq;
+    const key = lat.toFixed(5) + ',' + lon.toFixed(5) + (fromGps ? ',gps' : '');
     $('geoStatus').textContent = '· buscando…';
     try {
-      if (!geoCache[key]) geoCache[key] = await lookup(lat, lon);
-      if (id !== geoReq) return; // llegó una respuesta vieja
+      const stale = () => id !== geoReq; // hubo otro cambio después de esta búsqueda
+      if (!geoCache[key]) { const r = await lookup(lat, lon, fromGps, stale); if (stale()) return; geoCache[key] = r; }
+      if (stale()) return;
       $('addr').value = geoCache[key];
       $('geoStatus').textContent = '';
       refresh();
     } catch { if (id === geoReq) $('geoStatus').textContent = '· no se encontró dirección, escríbela a mano'; }
-  }, 900);
+  }, delay);
 }
+// Fija una ubicación (desde el GPS, el mapa, la búsqueda o coordenadas pegadas)
+function pick(lat, lon, pan, fromGps = false) {
+  $('lat').value = (+lat).toFixed(6);
+  $('lon').value = (+lon).toFixed(6);
+  syncMap(pan);
+  refresh(); geocode(fromGps ? 0 : 150, fromGps);
+}
+$('addr').addEventListener('input', cancelGeo);
 ['lat', 'lon'].forEach(id => {
-  $(id).addEventListener('input', geocode);
+  $(id).addEventListener('input', () => geocode());
   // pegar "19.254043, -69.916246" (copiado de Google Maps) llena ambos campos
   $(id).addEventListener('paste', e => {
-    const m = e.clipboardData.getData('text').match(/(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)/);
-    if (!m) return;
+    const m = e.clipboardData.getData('text').match(COORD_RE);
+    if (!m || !validPos(+m[1], +m[2])) return;
     e.preventDefault();
-    $('lat').value = m[1]; $('lon').value = m[2];
-    refresh(); geocode();
+    pick(m[1], m[2], true);
   });
 });
+
+// ---------- Mapa (OpenStreetMap con Leaflet, se carga solo al abrirlo) ----------
+const DR = [18.7357, -70.1627]; // centro de República Dominicana
+let map = null, mapPos = '', lReady = null;
+function curPos() {
+  const lat = parseFloat($('lat').value), lon = parseFloat($('lon').value);
+  return validPos(lat, lon) ? [lat, lon] : null;
+}
+function loadLeaflet() {
+  return lReady ||= new Promise((res, rej) => {
+    const l = document.createElement('link');
+    l.rel = 'stylesheet'; l.crossOrigin = 'anonymous';
+    l.integrity = 'sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==';
+    l.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+    const s = document.createElement('script');
+    s.crossOrigin = 'anonymous';
+    s.integrity = 'sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g==';
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    s.onload = res;
+    s.onerror = () => { lReady = null; l.remove(); s.remove(); rej(new Error('no cargó el mapa')); };
+    document.head.append(l, s);
+  });
+}
+async function buildMap() {
+  await loadLeaflet();
+  const p = curPos();
+  // sin zoom por doble clic: cada clic mueve el pin
+  const m = L.map('map', { doubleClickZoom: false }).setView(p || DR, p ? 17 : 8);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(m);
+  const mk = L.marker(p || DR, { draggable: true });
+  if (p) mk.addTo(m);
+  m.on('click', e => pick(e.latlng.lat, e.latlng.lng, false));
+  mk.on('dragend', () => { const q = mk.getLatLng(); pick(q.lat, q.lng, false); });
+  mapPos = p ? p.join(',') : '';
+  map = {
+    show() { m.invalidateSize(); },
+    set(lat, lon, pan) {
+      mk.setLatLng([lat, lon]).addTo(m);
+      if (pan) m.setView([lat, lon], Math.max(m.getZoom(), 16));
+    }
+  };
+}
+// Mueve el pin a las coordenadas escritas (solo si cambiaron)
+function syncMap(pan = true) {
+  const p = curPos();
+  if (!map || !p) return;
+  const k = p.join(',');
+  if (k === mapPos) return;
+  mapPos = k;
+  map.set(p[0], p[1], pan);
+}
+$('mapBtn').onclick = async () => {
+  const box = $('mapBox');
+  box.hidden = !box.hidden;
+  if (box.hidden) return;
+  if (map) return map.show(); // recalcula tamaño por si se creó o cambió estando oculto
+  $('mapSrc').textContent = 'cargando mapa…';
+  try { await buildMap(); $('mapSrc').textContent = ''; map.show(); }
+  catch { $('mapSrc').textContent = 'no se pudo cargar el mapa'; }
+};
+let searchReq = 0;
+async function search() {
+  const q = $('q').value.trim(), id = ++searchReq;
+  if (!q) return;
+  const m = q.match(COORD_RE);
+  if (m && validPos(+m[1], +m[2]) && /^[-\d.,;\s]+$/.test(q)) return pick(m[1], m[2], true);
+  $('mapSrc').textContent = 'buscando…';
+  // viewbox = preferir República Dominicana (sin excluir el resto del mundo)
+  const j = await nominatim(`search?limit=1&viewbox=-72.1,20.0,-68.3,17.4&bounded=0&q=${encodeURIComponent(q)}`);
+  if (id !== searchReq) return; // hubo otra búsqueda después
+  $('mapSrc').textContent = '';
+  if (!Array.isArray(j) || !j[0]) return alert('No se encontró el lugar');
+  pick(+j[0].lat, +j[0].lon, true);
+}
+$('qBtn').onclick = search;
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
 
 // ---------- Fecha por defecto: ahora ----------
 (() => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); $('dt').value = d.toISOString().slice(0, 16); })();
@@ -247,7 +359,7 @@ async function addFiles(files) {
       const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕';
       x.onclick = () => { photos = photos.filter(q => q !== p); div.remove(); p.prev.close(); updateCount(); };
       const dl = document.createElement('button'); dl.className = 'dl'; dl.textContent = 'Descargar';
-      dl.onclick = () => download(p);
+      dl.onclick = () => tryDownload(p);
       div.append(p.canvas, x, dl);
       $('thumbs').append(div);
       draw(p.canvas, prev, prev.width, prev.height, getData());
@@ -262,27 +374,34 @@ function updateCount() {
 let t;
 function refresh() {
   clearTimeout(t);
-  t = setTimeout(() => { const d = getData(); photos.forEach(p => draw(p.canvas, p.prev, p.prev.width, p.prev.height, d)); }, 80);
+  t = setTimeout(() => { syncMap(); const d = getData(); photos.forEach(p => draw(p.canvas, p.prev, p.prev.width, p.prev.height, d)); }, 80);
 }
 ['addr', 'lat', 'lon', 'dt'].forEach(id => $(id).addEventListener('input', refresh));
 
+async function render(img, s) {
+  const c = document.createElement('canvas');
+  try {
+    draw(c, img, Math.round(img.width * s), Math.round(img.height * s), getData());
+    return await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+  } catch { return null; } finally { c.width = c.height = 0; }
+}
 async function download(p) {
   const img = await createImageBitmap(p.file);
-  const c = document.createElement('canvas');
-  draw(c, img, img.width, img.height, getData());
+  // si la foto supera el límite de canvas del navegador (p. ej. iPhone ~16 MP), se reduce
+  const blob = await render(img, 1) || await render(img, Math.min(1, Math.sqrt(16e6 / (img.width * img.height))));
   img.close();
-  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+  if (!blob) throw new Error('imagen demasiado grande');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = p.file.name.replace(/\.[^.]+$/, '') + '_marca.jpg';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  c.width = c.height = 0;
 }
+const tryDownload = p => download(p).catch(() => alert('No se pudo guardar ' + p.file.name));
 $('dlAll').onclick = async () => {
   $('dlAll').disabled = true;
-  for (const p of photos) { await download(p); await new Promise(r => setTimeout(r, 300)); }
-  $('dlAll').disabled = false;
+  for (const p of [...photos]) { await tryDownload(p); await sleep(300); }
+  $('dlAll').disabled = !photos.length;
 };
 $('clear').onclick = () => { photos.forEach(p => p.prev.close()); photos = []; $('thumbs').innerHTML = ''; updateCount(); };
 
